@@ -1,230 +1,164 @@
-# updatePlayers (moomoo.js) → _ha (nozo-single) Port Plan
+# AdvHeal Port Plan
 
-## Size
-- **moomoo.js `updatePlayers`**: L30311–L34478 = **4,168 lines**
-- **nozo-single `_ha`**: L5191–L5483 = **293 lines**
-- **Gap**: ~3,875 lines not ported
+## Target
+Port the healer decision system from `moomoo.js updatePlayers` (L30653–31118) into `project-nozo-single.user.js`.
 
----
+## What advHeal Does
+Every server tick, `_hO` (health update handler) pushes damage events into `this.advHeal[]`. The advHeal drain loop then iterates these events and decides:
+- **Instant heal** (`healer()`) — call now, no delay
+- **Deferred heal** — call via `setTimeout` or `game.tickBase` after N ticks/ms
+- **Skip** — don't heal (damage too small, ignore type)
 
-## What's Already Ported (in `_ha`)
-
-| moomoo.js section | nozo equivalent | Status |
-|---|---|---|
-| KYS gate | `_handleKysGate(p)` | ✅ |
-| shame → my.reSync | L5224–5225 | ✅ |
-| mills/oldXY init | L5227–5228 | ✅ |
-| game.tick++ | L5230 | ✅ |
-| tickQueue execution | L5232–5236 | ✅ |
-| safeGetObjectsInLineOfSight | L5238–5247 | ✅ |
-| visibility reset | L5253–5256 | ✅ |
-| phantom cleanup | L5258–5263 | ✅ |
-| 13-field tuple pass (pos, skin, etc.) | L5267–5332 | ✅ |
-| nearObj scan + traps + autobreaker | L5334–5423 | ✅ |
-| weapon indexes + manageReload | L5425–5438 | ✅ |
-| second tuple pass (enemy/nears/damageThreat) | L5440–5462 | ✅ |
-| calledTickCalc | L5465 | ✅ |
-| syncResourceCacheFromObjects | L5466 | ✅ |
-| pathfinder (if targetPos) | L5468–5474 | ✅ |
+Decisions are gated by: damage amount, enemy weapon type, shame count, danger level, trap state, healing beta mode.
 
 ---
 
-## NOT Ported — Remaining Blocks (by line range in moomoo.js)
+## Dependencies — What Needs Porting
 
-### A. Pre-Tuple Tick Hooks (~5 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `wanderTick()` call | 30336 | ~~Wander tick called before tuple passes.~~ **DEAD CODE — intentionally skipped.** |
-| `dPacketTracker.dirs = []` | 30333 | Direction packet tracker reset |
+### Phase 1: Leaf Dependencies (8 functions)
 
-### B. Post-First-Tuple Hooks (~4 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `updatePlayerKinematics(tmpObj, game)` | 30588 | Kinematics update per player object |
+| # | Function | moomoo.js L# | What It Does | Effort |
+|---|---|---|---|---|
+| 1.1 | `healthBased()` | 19030 | Returns how many food items to place based on missing HP | tiny |
+| 1.2 | `soldierMult()` | 19026 | Returns soldier skin damage multiplier | tiny |
+| 1.3 | `addDeadPlayer(tmpObj)` | 28103 | `deadPlayers.push(new DeadPlayer(...))` | tiny |
+| 1.4 | `notif2(msg, target)` | 29876 | DOM toast notification with fade in/out | small |
+| 1.5 | `addMenuChText(name, msg, color, ...)` | 13662 | Logs to in-game menu chat panel | small |
+| 1.6 | `getAttacker(damaged)` | 19039 | Maps damage value → attacker weapon info | small |
+| 1.7 | `getAttackDir(debug)` | 25596 | Attack direction considering aim lock, weapon, auto-break, anti-push (~40 lines) | medium |
+| 1.8 | `healer(t)` | 19059 | Places food recursively. Uses `healthBased`, `place`, `getAttackDir`, `game.tickBase` | small |
+| 1.9 | `HKH()` | 19230 | Hit-Kill-Hit combat combo execution | medium |
 
-### C. textManager Stack Merge (~35 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `textManager.stack` merge | 30592–30624 | Aggregates positive/negative text values, calls `textManager.showText()` |
+### Already in Nozo-Single (no port needed)
 
-### D. runAtNextTick / checkProjectileHolder (~5 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `runAtNextTick` drain → `checkProjectileHolder` | 30626–30630 | Runs queued projectile holder checks |
+| Function | Nozo Location |
+|---|---|
+| `getEl(id)` | L103 |
+| `place(id, rad, ...)` | L1483 → `this.root.place` → `ctx.place` |
+| `game.tickBase(fn, ticks)` | L4418 |
+| `findPlayerBySID(sid)` | `this._findPlayerBySid(sid)` |
 
-### E. Healer Decision System (~450 lines) — MAJOR
-| Item | Lines | Description |
-|---|---|---|
-| Healer helper closures | 30671–30752 | `_healIsBullOrDaggerPressure`, `_healIsDangerNowTight`, `_healShouldAllowFastHealNonInsta`, `_healLogDecision`, `_healSlowHeal`, `_healSlowHealBullDaggerFallback`, `_healWithShameGate` |
-| `advHeal.forEach` — death detection | 30754–30778 | Player death logging, `addDeadPlayer()`, `notif2()` |
-| Bull-tick detection | 30782–30790 | `player.bullTick = game.tick`, poison counter, bullTicked flag |
-| Full heal decision tree | 30796–31118 | Damage-type gating, `shouldHeal` logic, weapon-specific thresholds (sword insta, polearm/katana, dagger), per-damage-type heal timing |
+### Phase 2: Helper Closures (the decision engine)
 
-### F. Combat Scans Construction (~170 lines) — MAJOR
-| Item | Lines | Description |
-|---|---|---|
-| `scans` object | 31119–31190 | player scans (antiSpikeTick), near scans (trapFound, hasTeamTrapOnEnemy), los scans (solidBlockers, autoInstaClear), hammer scans (trap, trapDist, closeD, inCloseRange) |
-| Object iteration for scans | 31191–31260 | Populates all scan fields from liztobj |
-| `captureCombatMovementData()` | 31283–31289 | Snapshots traps state + meta for combat movement |
-
-### G. Insta Decision Tree (~470 lines) — MAJOR
-| Item | Lines | Description |
-|---|---|---|
-| `knockBackPredict` → spike sync | 31293–31300 | "insta them" / "primary sync" detection |
-| Prehit / antiSpike logic | 31301–31355 | Spike prediction, antiSpike flag toggling |
-| `healer1()` call | 31360 | Single heal call |
-| Bulltick enemy detection | 31380–31382 | Chat announcement when enemy bullticks |
-| `trapFound` / `updateTrapTankEquipPrediction` | 31388–31419 | Trap-found propagation, tank equip prediction |
-| `canInsta` checks | 31421–31428 | `checkCanInsta(true/false)` → `_things.canNoBull`, `_things.canBull` |
-| `autoInsta` logic | 31430–31508 | Available insta types, LOS check, shame-gated auto-instas |
-| `smartAutoInsta` | 31490–31569 | Turret bull-tick phase prediction, one-frame bull tick |
-| `autobullspam` | 31573–31581 | `instaC.canspam` / `instaC.spammer()` |
-| `autoGo` + mill | 31606–31695 | Auto-gather resource walk |
-| `instaC.can` / `instaC.canCounter` / `hammerInsta` | 31696–31716 | Main insta trigger, counter-type, hammer trap insta |
-| `instaC.canSpikeTick` / `revTick` / `syncHit` | 31717–31742 | Spike-tick insta, rev-tick insta |
-| `instaC.canKb` | 31743–31747 | Knockback insta guard |
-| `nearspiker` handling | 31750–31760 | Spike-proximity auto-break coordination |
-
-### H. AutoBreak / Trap Aim (~40 lines)
-| Item | Lines | Description |
-|---|---|---|
-| AutoBreak wait-hit state machine | 31761–31798 | Coordinates trap-hit timing with autoBreak for swing timing |
-| `canEnemyTickMe` | 31799–31800 | Whether enemy can tick the player into a spike |
-
-### I. Click/Macro/Reload/Insta Movement (~130 lines)
-| Item | Lines | Description |
-|---|---|---|
-| Manual click insta handling | 31801–31827 | Left/right click insta triggers |
-| Middle-click insta | 31827–31832 | ageInsta bow movement, rangeType |
-| `kmTickMovement` | 31845–31887 | Auto-KM movement state machine (blocked/by-trap/perf states) |
-| Macro hotkey instas | 31888–31895 | `macro.t` → tickMovement, `macro.` → boostTickMovement |
-| Reload manager autoBreak lock | 31898–31901 | Prevents reload during autoBreak |
-| Weapon-specific reload + aim | 31902–31926 | Wasd-relative aim, weapon-switch reload logic |
-
-### J. Preplace / AutoPlace / AutoReplace (~40 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `traps.preplaces` reset | 31927–31929 | Clears preplace arrays |
-| `traps.autoReplace` | 31931–31934 | Replaces broken traps |
-| `traps.autoPlace` chains | 31937–31953 | Multi-condition autoPlace calls (enemy in trap, near dist thresholds) |
-| `preplacer()` / `autoOneFrame` / `adxtick` | 31957–31964 | Preplacer, one-frame spike placing, ADX tick |
-
-### K. Anti-Spike Bot Positioning (~50 lines)
-| Item | Lines | Description |
-|---|---|---|
-| Chosen spike selection | 31965–32014 | Finds best spike near enemy for anti-spike bot positioning |
-
-### L. Insta Spot Computation (~140 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `computeInstaSpotStable()` | 32042–32142 | Finds stable position behind trap for insta (angle scoring, LOS, smoothing) |
-| `_things.stealM` | 32144 | Steal-mode detection |
-| `instaC.rangeType()` auto-trigger | 32166–32207 | Long-range insta auto-fire |
-| Full insta spot setup | 32213–32256 | Trap-edge spot, ring radius, obstacle filtering, smooth render |
-
-### M. Bull Window Management (~40 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `bullExpectedDmg()` | 32262–32266 | Calculates expected bull damage |
-| `startBullWindow()` / `closeBullWindow()` | 32267–32277 | Opens/closes bull prediction window |
-| `canBullTick(de)` | 32298–32321 | Whether enemy can bull-tick the player |
-
-### N. dodgeKBI (~170 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `dodgeKBI()` | 32323–32493 | Knockback-instakill dodge movement (vector-based escape from enemy+spike combos) |
-
-### O. Object Cleanup / BreakItem (~160 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `closeAI` proximity cleanup | 32495–32580 | Triggers cleanup when AI is near |
-| `breakItem` collection | 32581–32621 | Gathers nearby breakable items |
-| Mill routing | 32625–32779 | Resource-mill pathfinding |
-
-### P. autoRuby (~170 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `autoRuby` resource routing | 32803–32973 | Ruby/stone auto-gather pathfinding |
-
-### Q. Skin / Weapon Selection (~100 lines)
-| Item | Lines | Description |
-|---|---|---|
-| Skin switching | 32917–33117 | Anti-shame skin selection, gear-based skin logic |
-| Weapon selection | 33118–33177 | Auto-weapon switching for insta/situational |
-
-### R. autoPushChain (~260 lines)
-| Item | Lines | Description |
-|---|---|---|
-| Chain push detection | 33178–33258 | Multi-enemy push chain coordination |
-| Death/shame push abort | 33259–33454 | Aborts push on death or high shame |
-| Push state transitions | 33455–33661 | `_things.going_` → `_things.going` state machine |
-
-### S. Camp Point Movement (~100 lines)
-| Item | Lines | Description |
-|---|---|---|
-| Camp point following | 33662–33753 | Moves toward `_things.campPoint_` with distance thresholds |
-| Weapon code switching | 33754–33769 | Selects appropriate weapon for camping |
-| Trap-aware movement | 33770–33779 | Movement adjustments when in trap |
-
-### T. Wander Management (~60 lines)
-| Item | Lines | Description |
-|---|---|---|
-| Wander target cycling | 33947–34011 | Cycles wander targets when close, handles bull active check |
-
-### U. reSync / anti0Tick (~100 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `_things.reSync` handling | 34037–34055 | Resync flag management |
-| `needAnti0` / `anti0Tick` | 34056–34237 | Anti-0-tick (zero-tick insta) prediction and counter |
-
-### V. WASD Movement (~70 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `useWasd` movement | 34295–34305 | WASD-based movement integration |
-
-### W. autoPush / autoPush2 (~170 lines)
-| Item | Lines | Description |
-|---|---|---|
-| `autoPush` main logic | 34306–34443 | Auto-push toward enemy with range checks, insta coordination |
-| `autoPush2` logic | 34444–34468 | Secondary push path (bot skin movement) |
-
----
-
-## Summary: 23 Remaining Blocks (~3,875 lines)
-
-| Priority | Block | Lines | Dependencies |
+| # | Closure | moomoo.js Lines | What It Does |
 |---|---|---|---|
-| **HIGH** | E. Healer decision system | ~450 | `advHeal`, `healer()`, `notif2`, `addDeadPlayer`, `addMenuChText` |
-| **HIGH** | F. Combat scans construction | ~170 | `liztobj`, `_things`, `captureCombatMovementData` |
-| **HIGH** | G. Insta decision tree | ~470 | `instaC`, `knockBackPredict`, `healer1`, `updateTrapTankEquipPrediction`, `autoInsta` |
-| **MED** | H. AutoBreak/trap aim | ~40 | `autoBreak`, `traps`, `setAttackAimLock`, `sendAutoGather` |
-| **MED** | I. Click/macro/reload/insta movement | ~130 | `instaC`, `clicks`, `macro`, `kmTickMovement` |
-| **MED** | J. Preplace/autoPlace/autoReplace | ~40 | `traps.preplaces`, `traps.autoReplace`, `traps.autoPlace` |
-| **MED** | K. Anti-spike bot positioning | ~50 | `liztobj`, enemy position |
-| **MED** | L. Insta spot computation | ~140 | `computeInstaSpotStable`, `instaC.rangeType` |
-| **MED** | M. Bull window management | ~40 | `game.tick`, `player.bullTick` |
-| **MED** | N. dodgeKBI | ~170 | `knockBackPredictEnemyToPlayer`, movement system |
-| **MED** | O. Object cleanup / breakItem | ~160 | `closeAI`, `breakObjects`, mill routing |
-| **MED** | P. autoRuby | ~170 | Resource routing, pathfinding |
-| **MED** | Q. Skin/weapon selection | ~100 | `selectWeapon`, `buyEquip`, skin items |
-| **MED** | R. autoPushChain | ~260 | Push chain state machine |
-| **MED** | S. Camp point movement | ~100 | `_things.campPoint_` (from calledTickCalc) |
-| ~~LOW~~ | ~~A. Pre-tuple hooks~~ | ~~5~~ | **DEAD CODE** — `wanderTick` not needed, `dPacketTracker` unused |
-| **LOW** | B. updatePlayerKinematics | ~4 | Per-player kinematics |
-| **LOW** | C. textManager.stack | ~35 | `textManager.showText` |
-| **LOW** | D. runAtNextTick | ~5 | `checkProjectileHolder` |
-| **LOW** | T. Wander management | ~60 | `_things.wander_` |
-| **LOW** | U. reSync/anti0Tick | ~100 | `_things.reSync`, `anti0Tick` |
-| **LOW** | V. WASD movement | ~70 | `useWasd` |
-| **LOW** | W. autoPush/autoPush2 | ~170 | `my.autoPush`, `my.autoPush2` |
+| 2.1 | `_healIsBullOrDaggerPressure()` | 30679–30684 | True if enemy has dagger (idx 7) or player has dagger vs katana/tail-21 |
+| 2.2 | `_healIsDangerNowTight(damaged, dmg, tmpObj, inTrap)` | 30685–30693 | True if inTrap OR big hit OR combo threat OR close-range reload threat |
+| 2.3 | `_healShouldAllowFastHealNonInsta(tmpObj)` | 30694–30696 | `shameCount < 2` |
+| 2.4 | `_healLogDecision(stage, reason, damaged, dmg, tmpObj, inTrap)` | 30697–30708 | Debug logging via `addMenuChText` with per-tick dedup |
+| 2.5 | `_healSlowHeal(timerMs, delayTicks, ...)` | 30709–30719 | `game.tickBase(healer, delayTicks)` or `setTimeout(healer, timerMs)` |
+| 2.6 | `_healSlowHealBullDaggerFallback(timerMs, ...)` | 30720–30726 | Wraps slowHeal with bull/dagger-specific delay logic |
+| 2.7 | `_healWithShameGate(wantsInstant, reason, ...)` | 30727–30751 | Main decision gate: instant vs deferred based on danger/shame/beta |
+
+### Phase 3: advHeal Drain Loop (the main body)
+
+| # | Section | moomoo.js Lines | What It Does |
+|---|---|---|---|
+| 3.1 | Death detection | 30754–30778 | If health ≤ 0: mark death, `notif2()`, `addDeadPlayer()`, GM target-kill cleanup |
+| 3.2 | Bull-tick detection | 30782–30790 | `damaged == 5*soldier` → `player.bullTick`, resync clear, poison counter |
+| 3.3 | Self-damage heal (beta, low ping) | 30796–31042 | `pingTime < 150` + beta enabled: food-based thresholds, weapon-specific tree (sword/polearm/katana/dagger/shield/spear/axe), HKH combo, shield anti |
+| 3.4 | Self-damage heal (non-beta, low ping) | 31043–31055 | `pingTime < 150` + no beta: simpler damage-threat gating |
+| 3.5 | Out-of-game poison | 31056–31060 | `setPoisonTick` when not inGame |
+| 3.6 | Self-damage heal (high ping) | 31062–31115 | `pingTime >= 150`: same structure as 3.3/3.4 but `traps.inTrap` aware, `healTimeout = 60` |
+| 3.7 | Non-self damage | 31116–31117 | Poison tick detection for other players |
+| 3.8 | `advHeal = []` clear | 31118 | Reset for next tick |
+
+---
+
+## State Already Available in Nozo
+
+| State | Source |
+|---|---|
+| `this.advHeal[]` | `_hO` handler (L5816, L5826) — `[sid, hp, damaged]` tuples |
+| `this.root.scans` | `buildCombatScans(p)` — near/player/los/hammer |
+| `this.root.near` / `.enemy` | `_ha()` second tuple pass |
+| `this.root.traps` | First tuple pass — `inTrap`, `info` |
+| `this.root.game` | `tick`, `tickBase()`, `tickQueue` |
+| `this.legacyCtx` | `_things` mirror — `nearTrap`, `instaC`, `configs`, `pingTime` |
+| `p` / `player` | `.health`, `.shameCount`, `.damageThreat`, `.reloads[]`, `.weapons[]`, `.skinIndex`, `.tailIndex` |
+| `getEl(id)` | L103 |
+| `place(...)` | `this.root.place` |
+| `game.tickBase(...)` | L4418 |
+| `this._findPlayerBySid(sid)` | Player lookup |
+
+---
+
+## State NOT Yet Available (needs wiring or stubbing)
+
+| State | How To Get It |
+|---|---|
+| `unsafeWindow.pingTime` | `this.legacyCtx.pingTime` (already mirrored at L4635) |
+| `getEl("healingBeta").checked` | `getEl` exists, just needs DOM element |
+| `getEl("slowHealUnlessInsta").checked` | Same |
+| `config.isSandbox` | `this.root.config.isSandbox` or `_config.isSandbox` |
+| `configs.HKH` | `this.root.configs.HKH` or `_configs.HKH` |
+| `antispiketicked` | Legacy flag — likely dead code, guard or stub |
+| `safewalking` | Legacy flag — likely dead code, guard or stub |
+| `GM_getValue / GM_setValue / sendUpdate` | Target-kill tracking — stub: skip if `typeof GM_getValue !== "function"` |
+| `deadPlayers[]` | Create `this.root.deadPlayers = []` when `addDeadPlayer` is ported |
+| `my.autoAim` | `this.root.my.autoAim` |
+| `player.antiTimer` | `p.antiTimer` |
+
+## Porting Rule: No setTimeout — Tick-Based Only
+
+This game is tick-based. All `setTimeout`/`clearTimeout` calls in the original moomoo.js advHeal **must be converted to `game.tickBase`**.
+
+| Original setTimeout | Converted tickBase |
+|---|---|
+| `setTimeout(fn, ms)` | `game.tickBase(fn, Math.ceil(ms / game.tickRate))` |
+| `clearTimeout(id)` | Drop entirely — tickBase has no cancel mechanism |
+
+**3 conversions needed:**
+
+| Location | Original | Tick-Based Replacement |
+|---|---|---|
+| `_healSlowHeal` fallback | `setTimeout(() => healer(), timerMs)` | `game.tickBase(() => healer(), Math.ceil(timerMs / game.tickRate))` |
+| `healer()` ping-delay | `healTM = setTimeout(() => healer(1), pingTime * 1.5)` | `game.tickBase(() => healer(1), Math.ceil(pingTime * 1.5 / game.tickRate))` |
+| Shield anti swap-back | `setTimeout(() => { selectWeapon(w0); my.autoAim = false }, 250)` | `game.tickBase(() => { selectWeapon(w0); my.autoAim = false }, Math.ceil(250 / game.tickRate))` |
 
 ---
 
 ## Suggested Port Order
+
 ```
-E (healer) → F (scans) → G (insta tree) → H–I (autoBreak + click/macro)
-→ J–K (preplace + anti-spike pos) → L–M (insta spot + bull window)
-→ N (dodgeKBI) → O–P (cleanup + autoRuby)
-→ Q–R (skin/weapon + pushChain) → S (camp movement)
-→ B–C–D (small hooks) → T–U–V–W (movement systems)
+Phase 1: Leaf Dependencies (bottom-up)
+  1.1 healthBased()           — tiny, ~5 lines
+  1.2 soldierMult()           — tiny, ~10 lines
+  1.3 addDeadPlayer(tmpObj)   — tiny, 2 lines (+ deadPlayers[] init)
+  1.4 notif2(msg, target)     — small, ~30 lines DOM
+  1.5 addMenuChText(...)      — small, needs menu DOM ref
+  1.6 getAttacker(damaged)    — small, damage→weapon mapping
+  1.7 getAttackDir(debug)     — medium, ~40 lines (depends on place/aim lock)
+  1.8 healer(t)               — small (depends on healthBased, place, getAttackDir, tickBase)
+  1.9 HKH()                   — medium, combat combo
+
+Phase 2: Helper Closures (ported as PlayerRuntime methods)
+  2.1–2.7  All 7 closures    — ~80 lines, pure logic
+
+Phase 3: advHeal Drain Loop
+  3.1–3.8  Full loop          — ~250 lines, calls Phase 1+2
 ```
+
+---
+
+## What Can Be Stubbed / Skipped
+
+| Item | Reason |
+|---|---|
+| `GM_getValue('k')` / `GM_setValue` / `sendUpdate` | Target-kill tracking. Guard with `typeof` check. |
+| `antispiketicked` | Likely dead code. Guard or omit. |
+| `safewalking` | Likely dead code. Guard or omit. |
+| `clicks.left/right/middle` | Not in advHeal scope. Skip. |
+| `my.autoAim` | Mirror from `this.root.my.autoAim` if not present. |
+
+---
+
+## What NOT to Port in This Phase
+
+- Full insta decision tree
+- Preplace/autoPlace/autoReplace
+- autoPush/autoPush2/chainPush
+- Camp point movement
+- Skin/weapon auto-selection
+- dodgeKBI / bull window management
+- Renderer changes

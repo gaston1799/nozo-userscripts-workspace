@@ -544,6 +544,7 @@ class Player {
         this.visible = false;
         this.items = [];
         this.weapons = [0, 0];
+        this.weaponCode = 0;
         this.primaryIndex = 0;
         this.secondaryIndex = 0;
         this.itemCounts = { 0: 0, 1: 0, 2: 0, 3: 0 };
@@ -4410,6 +4411,13 @@ class PlayerRuntime {
         this.root.pathCellToWorld = (node) => this.pathCellToWorld(node);
         this.root.Pathfinder = (pos, one, two, pushinng) => this.Pathfinder(pos, one, two, pushinng);
         this.root.getObjectsInLineOfSight = (a, b, useProjectileRadius) => this.getObjectsInLineOfSight(a, b, useProjectileRadius);
+        this.root.packet = (type, ...args) => this.packet(type, ...args);
+        this.root.selectToBuild = (index, weapon) => this.selectToBuild(index, weapon);
+        this.root.selectWeapon = (index, isPlace) => this.selectWeapon(index, isPlace);
+        this.root.sendAutoGather = () => this.sendAutoGather();
+        this.root.buyEquip = (id, index) => this.buyEquip(id, index);
+        this.root.place = (id, rad, rmd, spikeTick) => this.place(id, rad, rmd, spikeTick);
+        this.root.canplace = (id, rad, ignoreObj) => this.canplace(id, rad, ignoreObj);
         const serverUpdateRate = Number((this.root.config && this.root.config.serverUpdateRate) || (_config && _config.serverUpdateRate) || 9);
         const baseGame = this.root.game || {};
         this.root.game = {
@@ -4494,6 +4502,115 @@ class PlayerRuntime {
         if (!this.root.NozoSingle) this.root.NozoSingle = {};
         this.root._things = this.legacyCtx;
         return this.legacyCtx;
+    }
+
+    packet(type, ...args) {
+        const net = this.root.NozoNext && this.root.NozoNext.packet;
+        if (net && typeof net.sendPacketData === "function" && net.getSocket && net.getSocket()) {
+            const sent = net.sendPacketData(type, args);
+            if (sent) return true;
+        }
+        const ws = this.socket || this.root.WS || this.root.ws;
+        if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error(`[NozoSingle:packet] socket not open for ${String(type)}`);
+        const msgpack = this.getMsgpack();
+        if (!msgpack) throw new Error("[NozoSingle:packet] msgpack missing");
+        ws.send(msgpack.encode([type, args]));
+        return true;
+    }
+
+    selectToBuild(index, weapon) {
+        return this.packet("z", index, weapon);
+    }
+
+    selectWeapon(index, isPlace) {
+        const p = this.ensurePlayer(this.mySid);
+        if (!isPlace) p.weaponCode = index;
+        return this.packet("z", index, 1);
+    }
+
+    sendAutoGather() {
+        return this.packet("K", 1, 1);
+    }
+
+    buyEquip(id, index) {
+        const p = this.ensurePlayer(this.mySid);
+        if (!p.alive || !this.inGame) return false;
+        if (index === 0) {
+            const fallback = p.skins[6] ? 6 : 0;
+            if (p.skins[id]) {
+                if (p.latestSkin !== id) return this.packet("c", 0, id, 0);
+                return true;
+            }
+            if (_configs.autoBuyEquip) {
+                const item = this.store.hats.find((hat) => hat.id == id);
+                if (item && p.points >= item.price) {
+                    this.packet("c", 1, id, 0);
+                    return this.packet("c", 0, id, 0);
+                }
+            }
+            if (p.latestSkin !== fallback) return this.packet("c", 0, fallback, 0);
+            return false;
+        }
+        if (index === 1) {
+            if (this.root.useWasd && id !== 11 && id !== 0) {
+                if (p.latestTail !== 0) return this.packet("c", 0, 0, 1);
+                return false;
+            }
+            if (p.tails[id]) {
+                if (p.latestTail !== id) return this.packet("c", 0, id, 1);
+                return true;
+            }
+            if (_configs.autoBuyEquip) {
+                const item = this.store.accessories.find((acc) => acc.id == id);
+                if (item && p.points >= item.price) {
+                    this.packet("c", 1, id, 1);
+                    return this.packet("c", 0, id, 1);
+                }
+            }
+            if (p.latestTail !== 0) return this.packet("c", 0, 0, 1);
+        }
+        return false;
+    }
+
+    sendAtck(type, angle) {
+        return this.packet("F", type, angle, 1);
+    }
+
+    place(id, rad, rmd, spikeTick) {
+        if (id == null) return false;
+        const p = this.ensurePlayer(this.mySid);
+        const item = this.items.list[p.items[id]];
+        if (!item) throw new Error(`[NozoSingle:place] missing item slot ${String(id)}`);
+        const tmpS = p.scale + item.scale + (item.placeOffset || 0);
+        const tmpX = p.x2 + tmpS * Math.cos(rad);
+        const tmpY = p.y2 + tmpS * Math.sin(rad);
+        const limit = _config.isSandbox ? (id === 3 || id === 5 ? 299 : 99) : (item.group && item.group.limit ? item.group.limit : 99);
+        const groupId = item.group && item.group.id;
+        const canPlaceByCount = groupId == null || p.itemCounts[groupId] == null || p.itemCounts[groupId] < limit;
+        if (id !== 0 && !this.inGame && !_config.isSandbox) return false;
+        if (id !== 0 && p.alive && !canPlaceByCount) return false;
+        this.selectToBuild(p.items[id]);
+        this.sendAtck(1, rad);
+        this.selectWeapon(p.weaponCode, 1);
+        if (spikeTick && _configs.spikeTick && id === 2 && this.root.near && UTILS.getDist(this.root.near, { x: tmpX, y: tmpY }, 2, 0) <= 85) {
+            this.root.instaC.canSpikeTick = true;
+        }
+        if (rmd && this.root.placeVisible) {
+            this.root.placeVisible.push({ x: tmpX, y: tmpY, name: item.name, scale: item.scale, dir: rad });
+            this.root.game.tickBase(() => this.root.placeVisible.shift(), 1);
+        }
+        return true;
+    }
+
+    canplace(id, rad = this.ensurePlayer(this.mySid).dir, ignoreObj) {
+        if (id == null) return false;
+        const p = this.ensurePlayer(this.mySid);
+        const item = this.items.list[p.items[id]];
+        if (!item) throw new Error(`[NozoSingle:canplace] missing item slot ${String(id)}`);
+        const tmpS = p.scale + item.scale + (item.placeOffset || 0);
+        const tmpX = p.x2 + tmpS * Math.cos(rad);
+        const tmpY = p.y2 + tmpS * Math.sin(rad);
+        return this.objectManager.checkItemLocation(tmpX, tmpY, item.scale, 0.6, item.id, false, p, ignoreObj);
     }
 
     _assertInstakillDeps() {
@@ -4944,6 +5061,181 @@ class PlayerRuntime {
         // TODO(advHeal): scans.hammer.canRun gates hammerInsta trigger.
 
         return scans;
+    }
+
+    // ── AdvHeal Leaf Dependencies (ported from moomoo.js) ──
+
+    /** moomoo.js L19026 — soldier damage multiplier */
+    soldierMult() {
+        const p = this.ensurePlayer(this.mySid);
+        return p.latestSkin === 6 ? 0.75 : 1;
+    }
+
+    /** moomoo.js L19030 — how many food items to eat to reach full HP */
+    healthBased(p) {
+        if (!p || p.health === 100) return 0;
+        if (p.skinIndex !== 45 && p.skinIndex !== 56) {
+            const foodItem = this.items.list[p.items[0]];
+            if (!foodItem) throw new Error(`[NozoSingle:healthBased] missing food item for slot ${String(p.items[0])}`);
+            return Math.ceil((100 - p.health) / foodItem.healing);
+        }
+        return 0;
+    }
+
+    /** moomoo.js L28103 — track dead player for render */
+    addDeadPlayer(tmpObj) {
+        if (!this.root.deadPlayers) this.root.deadPlayers = [];
+        // DeadPlayer constructor may not exist; store plain object
+        this.root.deadPlayers.push({
+            x: tmpObj.x, y: tmpObj.y, dir: tmpObj.dir,
+            buildIndex: tmpObj.buildIndex, weaponIndex: tmpObj.weaponIndex,
+            weaponVariant: tmpObj.weaponVariant, skinColor: tmpObj.skinColor,
+            scale: tmpObj.scale, name: tmpObj.name
+        });
+    }
+
+    /** moomoo.js L29876 — DOM toast notification */
+    notif2(message, target) {
+        const notif = document.createElement("div");
+        Object.assign(notif.style, {
+            position: "fixed", bottom: "20px", right: "20px",
+            backgroundColor: "rgba(0,0,0,0.5)", color: "white",
+            padding: "14px 28px", borderRadius: "10px",
+            fontFamily: "'Hammersmith', sans-serif", fontSize: "18px",
+            fontWeight: "bold", zIndex: "1000",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            opacity: "0", transform: "translateY(20px)",
+            transition: "opacity 0.6s ease, transform 0.6s ease"
+        });
+        notif.textContent = `${message} ${target}`;
+        document.body.appendChild(notif);
+        requestAnimationFrame(() => {
+            notif.style.opacity = "1";
+            notif.style.transform = "translateY(0)";
+        });
+        setTimeout(() => {
+            notif.style.opacity = "0";
+            notif.style.transform = "translateY(20px)";
+            setTimeout(() => { if (notif.parentNode) notif.remove(); }, 600);
+        }, 3000);
+    }
+
+    /** moomoo.js L13662 — in-game menu chat log */
+    addMenuChText(name, message, color, noTimer, textFx) {
+        const root = this.root;
+        const HTML = root.HTML;
+        if (!HTML || typeof HTML.set !== "function") return false;
+        HTML.set("menuChatDiv");
+        color = color || "white";
+        let text = "";
+        if (name) text += `${(!noTimer ? " - " : "") + name}`;
+        if (message) text += `${(name ? ": " : !noTimer ? " - " : "") + message}\n`;
+        HTML.addDiv({ id: "menuChDisp" + (root.menuChCounts || 0), style: `color: ${color}`, appendID: "mChMain" }, (html) => {
+            html.add(text);
+        });
+        const menuChats = root.menuChats || document.getElementById("menuChats");
+        if (menuChats) menuChats.scrollTop = menuChats.scrollHeight;
+        root.menuChCounts = (root.menuChCounts || 0) + 1;
+        return true;
+    }
+
+    /** moomoo.js L19039 — find attackers from damage value */
+    getAttacker(damaged) {
+        const enemy = this.root.enemy || [];
+        return enemy.filter(tmp => tmp && tmp.attacked);
+    }
+
+    /** moomoo.js L25596 — attack direction with aim-lock, auto-break, anti-push fallbacks.
+     *  Adapted: many deps (getAttackAimLock, autoBreak, clicks, useWasd, rubyDir, etc.)
+     *  are not yet ported. Falls back to traps.aim → near.aim2 → p.dir. */
+    getAttackDir(p, debug) {
+        if (!p) return debug ? "0" : 0;
+        const root = this.root;
+        const things = this.legacyCtx;
+        const near = root.near && root.near.sid != null ? root.near : null;
+        const traps = root.traps || this.traps || {};
+
+        // 1) aim lock (legacy)
+        if (typeof root.getAttackAimLock === "function") {
+            const lockedAim = root.getAttackAimLock();
+            if (lockedAim) {
+                root.lastDir = lockedAim.aim;
+                return debug ? lockedAim.tag : lockedAim.aim;
+            }
+        }
+
+        // 2) anti-push spike aim
+        if (things && things.antiPushSpikeAimActive && Number.isFinite(things.antiPushSpikeAimDir)) {
+            root.lastDir = things.antiPushSpikeAimDir;
+            return debug ? "antiPushSpikeAim" : (root.lastDir || 0);
+        }
+
+        // 3) trap aim
+        if (traps.inTrap && Number.isFinite(traps.aim)) {
+            root.lastDir = traps.aim;
+            return debug ? "traps.aim" : (root.lastDir || 0);
+        }
+
+        // 4) auto-break aim (guarded — autoBreak may not be ported)
+        if (root.autoBreak && root.autoBreak.active && Number.isFinite(root.autoBreak.aim)) {
+            root.lastDir = root.autoBreak.aim;
+            return debug ? "autoBreak.aim" : (root.lastDir || 0);
+        }
+
+        // 5) enemy direction
+        if (near && root.enemy && root.enemy.length) {
+            root.lastDir = near.aim2;
+            return debug ? "near.aim2" : (root.lastDir || 0);
+        }
+
+        // 6) fallback
+        root.lastDir = p.dir || 0;
+        return debug ? "player.dir" : (root.lastDir || 0);
+    }
+
+    /** moomoo.js L19059 — place food items. Tick-based adaptation: setTimeout → game.tickBase */
+    healer(p, t) {
+        const game = this.root.game;
+        const tickRate = Number(game.tickRate) || 80;
+        const pingTime = Number(this.legacyCtx.pingTime || 0);
+
+        if (!t) {
+            const preTicks = Math.max(1, Math.ceil((pingTime * 1.5) / tickRate));
+            game.tickBase(() => { this.healer(p, 1); }, preTicks);
+            return;
+        }
+
+        const count = this.healthBased(p);
+        if (p.skinIndex === 56) {
+            game.tickBase(() => {
+                for (let i = 0; i < this.healthBased(p); i++) {
+                    this.place(0, this.getAttackDir(p));
+                }
+            }, 1);
+        } else {
+            for (let i = 0; i < count; i++) this.place(0, this.getAttackDir(p));
+        }
+    }
+
+    /** moomoo.js L19230 — Hit-Kill-Hit combo execution. Adapted: setTimeout → tickBase */
+    HKH(p) {
+        const root = this.root;
+        const game = root.game;
+        const my = root.my || {};
+
+        my.autoAim = true;
+        this.sendAutoGather();
+        this.buyEquip(53, 0);
+        this.selectWeapon(p.weapons[1]);
+
+        game.tickBase(() => {
+            this.buyEquip(7, 0);
+            this.selectWeapon(p.weapons[0]);
+            game.tickBase(() => {
+                this.sendAutoGather();
+                my.autoAim = false;
+            }, 1);
+        }, 1);
     }
 
     updatePlayerKinematics(playerObj) {
@@ -5799,6 +6091,350 @@ class PlayerRuntime {
             this.root.pathFind.active = true;
             this.Pathfinder(targetPos, 0, 0);
         }
+
+        // ── AdvHeal Drain Loop (1:1 port from moomoo.js L30653–31118) ──
+        // Healing actions are live; non-heal combat extras remain staged until their systems are validated.
+        if (p && p.alive) {
+            const near = this.root.near && this.root.near.sid != null ? this.root.near : null;
+            const enemy = this.root.enemy || [];
+            const things = this.legacyCtx;
+            const traps = this.traps;
+            const game = this.root.game;
+            const my = this.root.my || {};
+            const configs = things.configs || this.root.configs || {};
+            const pingTime = Number(things.pingTime || 0);
+            const items = this.items || things.items;
+
+            // Healer helper closures (adapted — will be extracted as methods later)
+            const _HEAL_SHAME_SOFT_CAP = 3;
+            const _HEAL_SHAME_FAST_HEAL_CUTOFF = 2;
+            const _HEAL_NON_INSTA_DELAY_TICKS = 2;
+            const _HEAL_DANGER_COMBO_THREAT = 95;
+            const _HEAL_DANGER_BIG_HIT = 30;
+            const _HEAL_DANGER_CLOSE_RANGE = 160;
+
+            const _healIsBullOrDaggerPressure = () => {
+                return !!(enemy.length && near && (
+                    near.primaryIndex === 7 ||
+                    (p.weapons[0] === 7 && (near.skinIndex === 11 || near.tailIndex === 21))
+                ));
+            };
+            const _healIsDangerNowTight = (damaged, dmg, tmpObj, inTrap) => {
+                const closeReloadThreat = enemy.length && near && near.dist2 <= _HEAL_DANGER_CLOSE_RANGE
+                    && near.reloads && near.reloads[near.primaryIndex] <= pingTime;
+                const closeReloadDanger = closeReloadThreat && !_healIsBullOrDaggerPressure();
+                return inTrap ||
+                    damaged >= _HEAL_DANGER_BIG_HIT ||
+                    (p.damageThreat || 0) + dmg >= _HEAL_DANGER_COMBO_THREAT ||
+                    (tmpObj.damageThreat || 0) + dmg >= _HEAL_DANGER_COMBO_THREAT ||
+                    closeReloadDanger;
+            };
+            const _healShouldAllowFastHealNonInsta = (tmpObj) => {
+                return tmpObj.shameCount < _HEAL_SHAME_FAST_HEAL_CUTOFF;
+            };
+            const _healLogDecision = (stage, reason, damaged, dmg, tmpObj, inTrap) => {
+                // TODO(advHeal): wire addMenuChText when ported
+                // this.addMenuChText("[HealDbg]", msg, "#7fd6ff", 0);
+            };
+            const _healSlowHeal = (timerMs, delayTicks, damaged, dmg, tmpObj, inTrap, slowUnlessInsta) => {
+                let useDelayTicks = delayTicks;
+                if (slowUnlessInsta && useDelayTicks <= 0 && !_healIsDangerNowTight(damaged, dmg, tmpObj, inTrap)
+                    && !_healShouldAllowFastHealNonInsta(tmpObj)) {
+                    useDelayTicks = _HEAL_NON_INSTA_DELAY_TICKS;
+                }
+                if (useDelayTicks > 0) {
+                    game.tickBase(() => { this.healer(p); }, useDelayTicks);
+                } else {
+                    const tickRate = Number(game.tickRate) || 80;
+                    game.tickBase(() => { this.healer(p); }, Math.max(1, Math.ceil(timerMs / tickRate)));
+                }
+            };
+            const _healSlowHealBullDaggerFallback = (timerMs, damaged, dmg, tmpObj, inTrap, healTimeout, slowUnlessInsta) => {
+                if (slowUnlessInsta && !_healIsDangerNowTight(damaged, dmg, tmpObj, inTrap)
+                    && !_healShouldAllowFastHealNonInsta(tmpObj)) {
+                    _healSlowHeal(timerMs, _HEAL_NON_INSTA_DELAY_TICKS, damaged, dmg, tmpObj, inTrap, slowUnlessInsta);
+                    return;
+                }
+                _healSlowHeal(timerMs, 0, damaged, dmg, tmpObj, inTrap, slowUnlessInsta);
+            };
+            const _healWithShameGate = (wantsInstant, reason, damaged, dmg, tmpObj, inTrap, healTimeout, betaEnabled, slowUnlessInsta) => {
+                if (!wantsInstant) {
+                    _healSlowHeal(healTimeout, 0, damaged, dmg, tmpObj, inTrap, slowUnlessInsta);
+                    return;
+                }
+                if (slowUnlessInsta) {
+                    if (_healIsDangerNowTight(damaged, dmg, tmpObj, inTrap)) {
+                        _healLogDecision("instant", reason, damaged, dmg, tmpObj, inTrap);
+                        this.healer(p);
+                    } else if (_healShouldAllowFastHealNonInsta(tmpObj)) {
+                        _healLogDecision("defer_fast_shame_budget", reason, damaged, dmg, tmpObj, inTrap);
+                        _healSlowHeal(healTimeout, 0, damaged, dmg, tmpObj, inTrap, slowUnlessInsta);
+                    } else {
+                        _healLogDecision("defer_noninsta_delay", reason, damaged, dmg, tmpObj, inTrap);
+                        _healSlowHeal(healTimeout, _HEAL_NON_INSTA_DELAY_TICKS, damaged, dmg, tmpObj, inTrap, slowUnlessInsta);
+                    }
+                    return;
+                }
+                if (_healIsDangerNowTight(damaged, dmg, tmpObj, inTrap) || tmpObj.shameCount < _HEAL_SHAME_SOFT_CAP) {
+                    _healLogDecision("instant", reason, damaged, dmg, tmpObj, inTrap);
+                    this.healer(p);
+                } else {
+                    _healLogDecision("defer_softcap_delay", reason, damaged, dmg, tmpObj, inTrap);
+                    _healSlowHeal(healTimeout, 1, damaged, dmg, tmpObj, inTrap, slowUnlessInsta);
+                }
+            };
+
+            if (this.advHeal.length) {
+                this.advHeal.forEach((updHealth) => {
+                    // TODO(advHeal): guard — skip if pingTime < 150 not yet ported fully
+                    {
+                        let sid = updHealth[0];
+                        let value = updHealth[1];
+                        let damaged = updHealth[2];
+                        let tmpObj = this._findPlayerBySid(sid);
+                        let bullTicked = false;
+
+                        // —— Death detection ——
+                        if (tmpObj && tmpObj.health <= 0) {
+                            if (!tmpObj.death) {
+                                tmpObj.death = true;
+                                if (tmpObj !== p) {
+                                    // TODO(advHeal): GM target-kill tracking (stubbed)
+                                    // if (sid == GM_getValue('k')) { ... }
+                                    console.log(tmpObj.name, "has died", sid);
+                                    // this.notif2(tmpObj.name, "has died");
+                                    // this.addDeadPlayer(tmpObj);
+                                }
+                            }
+                        }
+
+                        // —— Bull-tick detection ——
+                        if (damaged === 5 * (p.skinIndex === 6 ? 0.75 : 1)) {
+                            p.bullTick = game.tick;
+                            if (tmpObj === p) {
+                                tmpObj.needTick = 0;
+                                if (my.reSync) { my.reSync = false; }
+                                if (p.skinIndex === 7) {
+                                    bullTicked = true;
+                                } else {
+                                    p.poisonCounter--;
+                                }
+                            }
+                        }
+
+                        if (tmpObj === p) {
+                            if (this.inGame) {
+                                // let attackers = this.getAttacker(damaged);
+                                let gearDmgs = [0.25, 0.45].map((val) => val * (items && items.weapons && items.weapons[p.weapons[0]] ? items.weapons[p.weapons[0]].dmg : 25) * this.soldierMult());
+                                let includeSpikeDmgs = enemy.length ? !bullTicked && (gearDmgs.includes(damaged) && near && near.skinIndex === 11) : false;
+                                let healTimeout = 140 - pingTime;
+                                let dmg = 100 - p.health;
+                                const healingBetaEnabled = !!(getEl("healingBeta") && getEl("healingBeta").checked);
+                                const _hSlowUnlessInsta = healingBetaEnabled && !!(getEl("slowHealUnlessInsta") && getEl("slowHealUnlessInsta").checked);
+                                const slowHeal = (t, d = 0) => _healSlowHeal(t, d, damaged, dmg, tmpObj, false, _hSlowUnlessInsta);
+                                const slowHealBullDaggerFallback = (t) => _healSlowHealBullDaggerFallback(t, damaged, dmg, tmpObj, false, healTimeout, _hSlowUnlessInsta);
+                                const healWithShameGate = (w, r) => _healWithShameGate(w, r, damaged, dmg, tmpObj, false, healTimeout, healingBetaEnabled, _hSlowUnlessInsta);
+
+                                if (healingBetaEnabled) {
+                                    const foodHeals = [20, 40, 30];
+                                    const foodIndex = p.items ? p.items[0] : 0;
+                                    const healAmount = foodHeals[foodIndex] || 0;
+
+                                    // Bull damage recording (condition only)
+                                    if (things.bull && things.bull.active && typeof damaged === "number") {
+                                        // things.damges.push(damaged);
+                                        // if (damaged === things.bull.expectedDmg) { things.bull.seenHit = true; }
+                                    }
+
+                                    const ignoreDamageTypes = (this.root.config && this.root.config.isSandbox) ? [] : [1, 2, 10, 24];
+                                    const dontAutoHeal = ignoreDamageTypes.includes(Math.floor(damaged)) || damaged < 4;
+                                    const lowHealth = Math.floor(100 - p.health) >= healAmount;
+                                    const bigHit = damaged >= healAmount;
+                                    let shouldHeal = lowHealth || p.shameCount > 0 || (!dontAutoHeal && bigHit);
+
+                                    if (enemy.length && near) {
+                                        // —— Weapon 0/7/8 (tool, dagger, stick) ——
+                                        if ([0, 7, 8].includes(near.primaryIndex)) {
+                                            if (damaged < 75) {
+                                                if (dontAutoHeal) {
+                                                    if (shouldHeal) slowHeal(healTimeout);
+                                                } else slowHeal(healTimeout);
+                                            } else healWithShameGate(true, "weapon_0_7_8_big_hit");
+                                        }
+
+                                        // —— Polearm/Katana safe hitback (HKH) ——
+                                        let NearHasOneFrame = near.primaryVariant >= 1 && near.weapons && near.weapons[0] === 5;
+                                        let PolOrKat = p.weapons[0] === 4 || p.weapons[0] === 5;
+                                        let canSafeHitback = PolOrKat && !traps.inTrap && p.shameCount <= 4 && !NearHasOneFrame;
+                                        // TODO(advHeal): antispiketicked, safewalking guards not ported
+                                        if (canSafeHitback && damaged >= 20 && configs.HKH && near.dist2 <= 150
+                                            && (p.weapons[0] === 4 || p.weapons[0] === 3 || p.weapons[0] === 5)
+                                            && p.skinIndex === 11 && p.reloads && p.reloads[p.weapons[1]] <= pingTime
+                                            && p.reloads[p.weapons[0]] <= pingTime) {
+                                            // this.HKH(p);
+                                            // this.addMenuChText("[Game]", "HitBack - KillHit", "lightBlue", 0, 1);
+                                            // healWithShameGate(true);
+                                        }
+
+                                        // —— Shield anti ——
+                                        if (p.weapons[1] === 11) {
+                                            if ([15, 9, 12, 13].includes(near.secondaryIndex) && near.reloads && near.reloads[near.secondaryIndex] === 1) {
+                                                if (damaged < 75) {
+                                                    // my.autoAim = true;
+                                                    // selectWeapon(p.weapons[1]);
+                                                    // slowHeal(healTimeout);
+                                                    // game.tickBase(() => { selectWeapon(p.weapons[0]); my.autoAim = false; }, Math.ceil(250 / (game.tickRate || 80)));
+                                                }
+                                            }
+                                        }
+
+                                        // —— Spear / Short Sword / Katana primary ——
+                                        if ([1, 2, 6].includes(near.primaryIndex)) {
+                                            if (damaged >= 25 && (p.damageThreat || 0) + dmg >= 95 && tmpObj.shameCount < 5) {
+                                                healWithShameGate(true, "axe_bat_spear_combo");
+                                            } else slowHeal(healTimeout);
+                                        }
+
+                                        // —— Polearm + hammer anti rev-tick ——
+                                        if (near.primaryIndex === 5 && near.secondaryIndex === 10 && traps.inTrap && dmg >= 10
+                                            && near.reloads && near.reloads[near.primaryIndex] === 0) {
+                                            healWithShameGate(true, "polearm_hammer_trap");
+                                        }
+
+                                        // —— Sword insta ——
+                                        if (near.primaryIndex === 3) {
+                                            if (near.secondaryIndex === 15) {
+                                                if (near.primaryVariant < 2) {
+                                                    if (damaged >= 35 && (p.damageThreat || 0) + dmg >= 95 && tmpObj.shameCount < 6) {
+                                                        tmpObj.canEmpAnti = true;
+                                                        healWithShameGate(true, "sword_musket_low_variant");
+                                                    } else slowHeal(healTimeout);
+                                                } else {
+                                                    if (damaged > 35 && (p.damageThreat || 0) + dmg >= 95 && tmpObj.shameCount < 6
+                                                        && game.tick - (p.antiTimer || 0) > 1) {
+                                                        tmpObj.canEmpAnti = true;
+                                                        tmpObj.antiTimer = game.tick;
+                                                        healWithShameGate(true, "sword_musket_high_variant");
+                                                    } else slowHeal(healTimeout);
+                                                }
+                                            } else {
+                                                if (damaged >= 25 && (p.damageThreat || 0) + dmg >= 95 && tmpObj.shameCount < 4) {
+                                                    healWithShameGate(true, "sword_combo");
+                                                } else slowHeal(healTimeout);
+                                            }
+                                        }
+
+                                        // —— Katana ——
+                                        if (near.primaryIndex === 4) {
+                                            if (near.primaryVariant >= 1) {
+                                                if (damaged >= 10 && (p.damageThreat || 0) + dmg >= 95 && tmpObj.shameCount < 4) {
+                                                    healWithShameGate(true, "katana_variant_combo");
+                                                } else slowHeal(healTimeout);
+                                            } else {
+                                                if (damaged >= 35 && (p.damageThreat || 0) + dmg >= 95 && tmpObj.shameCount < 3) {
+                                                    healWithShameGate(true, "katana_combo");
+                                                } else slowHeal(healTimeout);
+                                            }
+                                        }
+
+                                        // —— Polearm (undefined/5) ——
+                                        if ([undefined, 5].includes(near.primaryIndex)) {
+                                            if (near.secondaryIndex === 10) {
+                                                if (dmg >= (includeSpikeDmgs ? 10 : 20) && (tmpObj.damageThreat || 0) + dmg >= 80 && tmpObj.shameCount < 6) {
+                                                    healWithShameGate(true, "polearm_hammer_combo");
+                                                } else slowHeal(healTimeout);
+                                            } else if (near.primaryVariant >= 2 || near.primaryVariant === undefined) {
+                                                if (dmg >= (includeSpikeDmgs ? 15 : 20) && (tmpObj.damageThreat || 0) + dmg >= 50 && tmpObj.shameCount < 6) {
+                                                    healWithShameGate(true, "polearm_variant_combo");
+                                                } else slowHeal(healTimeout);
+                                            } else if ([undefined, 15].includes(near.secondaryIndex)) {
+                                                if (damaged > (includeSpikeDmgs ? 8 : 20) && (p.damageThreat || 0) >= 25 && (game.tick - (p.antiTimer || 0)) > 1) {
+                                                    if (tmpObj.shameCount < 5) {
+                                                        healWithShameGate(true, "polearm_secondary_none_musket");
+                                                    } else slowHeal(healTimeout);
+                                                } else slowHeal(healTimeout);
+                                            } else if ([9, 12, 13].includes(near.secondaryIndex)) {
+                                                if (dmg >= 25 && (p.damageThreat || 0) + dmg >= 70 && tmpObj.shameCount < 6) {
+                                                    healWithShameGate(true, "polearm_bow_combo");
+                                                } else slowHeal(healTimeout);
+                                            } else {
+                                                if (damaged > 25 && (p.damageThreat || 0) + dmg >= 95) {
+                                                    healWithShameGate(true, "polearm_generic_combo");
+                                                } else slowHeal(healTimeout);
+                                            }
+                                        }
+
+                                        // —— Axe ——
+                                        if (near.primaryIndex === 6) {
+                                            if (near.secondaryIndex === 15) {
+                                                if (damaged >= 25 && (tmpObj.damageThreat || 0) + dmg >= 95 && tmpObj.shameCount < 4) {
+                                                    healWithShameGate(true, "bat_musket_combo");
+                                                } else slowHeal(healTimeout);
+                                            } else {
+                                                if (damaged >= 70 && tmpObj.shameCount < 4) {
+                                                    healWithShameGate(true, "bat_big_hit");
+                                                } else slowHeal(healTimeout);
+                                            }
+                                        }
+
+                                        // Dagger counter flag
+                                        if (damaged >= 30 && near.reloads && near.reloads[near.secondaryIndex] === 0
+                                            && near.dist2 <= 150 && p.skinIndex === 11 && p.tailIndex === 21) {
+                                            this.root.instaC.canCounter = true;
+                                        }
+                                    } else {
+                                        // —— No enemy ——
+                                        if (damaged >= 70) {
+                                            healWithShameGate(true, "no_enemy_big_hit");
+                                        } else {
+                                            if (dontAutoHeal) {
+                                                if (shouldHeal) slowHeal(healTimeout);
+                                            } else slowHeal(healTimeout);
+                                        }
+                                    }
+                                } else {
+                                    // —— Non-beta path (pingTime < 150, no healing beta) ——
+                                    if (damaged >= (includeSpikeDmgs ? 8 : 25) && dmg + (p.damageThreat || 0) >= 80
+                                        && (game.tick - (p.antiTimer || 0)) > 1) {
+                                        if (tmpObj.reloads && tmpObj.reloads[53] <= pingTime && tmpObj.reloads[tmpObj.weapons[1]] === 0) {
+                                            tmpObj.canEmpAnti = true;
+                                        } else {
+                                            p.soldierAnti = true;
+                                        }
+                                        tmpObj.antiTimer = game.tick;
+                                        let shame = near && [0, 4, 6, 7, 8].includes(near.primaryIndex) ? 2 : 5;
+                                        if (tmpObj.shameCount < shame) {
+                                            healWithShameGate(true, "non_beta_combo");
+                                        } else {
+                                            if (near && (near.primaryIndex === 7 || (p.weapons[0] === 7 && (near.skinIndex === 11 || near.tailIndex === 21)))) {
+                                                slowHealBullDaggerFallback(healTimeout);
+                                            } else {
+                                                slowHeal(healTimeout, 1);
+                                            }
+                                        }
+                                    } else {
+                                        if (near && (near.primaryIndex === 7 || (p.weapons[0] === 7 && (near.skinIndex === 11 || near.tailIndex === 21)))) {
+                                            slowHealBullDaggerFallback(healTimeout);
+                                        } else {
+                                            slowHeal(healTimeout, 1);
+                                        }
+                                    }
+                                    if (near && damaged >= 25 && near.dist2 <= 140 && p.skinIndex === 11 && p.tailIndex === 21) {
+                                        this.root.instaC.canCounter = true;
+                                    }
+                                }
+                            } else {
+                                // —— Out of game: poison tick detection ——
+                                if (!tmpObj.setPoisonTick && (tmpObj.damaged === 5 || (tmpObj.latestTail === 13 && tmpObj.damaged === 2))) {
+                                    tmpObj.setPoisonTick = true;
+                                }
+                            }
+                        }
+                    } // end forEach
+                });
+                this.advHeal = [];
+            }
+        }
     }
 
     // O: updateHealth(sid, value)
@@ -6259,6 +6895,11 @@ class PlayerRuntime {
     bindSocket(ws) {
         if (!ws || this.boundSockets.has(ws)) return;
         this.boundSockets.add(ws);
+        this.socket = ws;
+        this.root.WS = ws;
+        if (this.root.NozoNext && this.root.NozoNext.packet && typeof this.root.NozoNext.packet.setSocket === "function") {
+            this.root.NozoNext.packet.setSocket(ws);
+        }
         try { ws.binaryType = "arraybuffer"; } catch (err) {
             console.error("[NozoSingle:WS:binaryType]", err);
             throw err;
