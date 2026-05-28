@@ -1,0 +1,267 @@
+{
+  "input": "C:\\Users\\Naquan\\userscripts\\moomoo.js",
+  "outputDir": "C:\\Users\\Naquan\\userscripts\\classes-out",
+  "extracted": 43,
+  "failed": 0,
+  "classes": [
+    {
+      "name": "CustomLogging",
+      "start": 426550,
+      "end": 428021,
+      "file": "CustomLogging.js"
+    },
+    {
+      "name": "element",
+      "start": 487890,
+      "end": 490781,
+      "file": "element.js"
+    },
+    {
+      "name": "MinHeap",
+      "start": 498407,
+      "end": 499334,
+      "file": "MinHeap.js"
+    },
+    {
+      "name": "Node",
+      "start": 499386,
+      "end": 499669,
+      "file": "Node.js"
+    },
+    {
+      "name": "SearchState",
+      "start": 499723,
+      "end": 500177,
+      "file": "SearchState.js"
+    },
+    {
+      "name": "EasyStarJS",
+      "start": 500261,
+      "end": 511021,
+      "file": "EasyStarJS.js"
+    },
+    {
+      "name": "deadfuturechickenmodrevival",
+      "start": 609305,
+      "end": 611712,
+      "file": "deadfuturechickenmodrevival.js"
+    },
+    {
+      "name": "HtmlAction",
+      "start": 611731,
+      "end": 618514,
+      "file": "HtmlAction.js"
+    },
+    {
+      "name": "LyricsPlayer",
+      "start": 618668,
+      "end": 623096,
+      "file": "LyricsPlayer.js"
+    },
+    {
+      "name": "Html",
+      "start": 1033346,
+      "end": 1035632,
+      "file": "Html.js"
+    },
+    {
+      "name": "Utils",
+      "start": 1120515,
+      "end": 1147184,
+      "file": "Utils.js"
+    },
+    {
+      "name": "Animtext",
+      "start": 1147203,
+      "end": 1150865,
+      "file": "Animtext.js"
+    },
+    {
+      "name": "Textmanager",
+      "start": 1150884,
+      "end": 1152490,
+      "file": "Textmanager.js"
+    },
+    {
+      "name": "GameObject",
+      "start": 1152508,
+      "end": 1159163,
+      "file": "GameObject.js"
+    },
+    {
+      "name": "Items",
+      "start": 1159181,
+      "end": 1195633,
+      "file": "Items.js"
+    },
+    {
+      "name": "Objectmanager",
+      "start": 1195651,
+      "end": 1203024,
+      "file": "Objectmanager.js"
+    },
+    {
+      "name": "Projectile",
+      "start": 1203042,
+      "end": 1206243,
+      "file": "Projectile.js"
+    },
+    {
+      "name": "Store",
+      "start": 1206262,
+      "end": 1228486,
+      "file": "Store.js"
+    },
+    {
+      "name": "ProjectileManager",
+      "start": 1228505,
+      "end": 1231516,
+      "file": "ProjectileManager.js"
+    },
+    {
+      "name": "AiManager",
+      "start": 1233444,
+      "end": 1244025,
+      "file": "AiManager.js"
+    },
+    {
+      "name": "AI",
+      "start": 1244044,
+      "end": 1249378,
+      "file": "AI.js"
+    },
+    {
+      "name": "Petal",
+      "start": 1249741,
+      "end": 1250405,
+      "file": "Petal.js"
+    },
+    {
+      "name": "addCh",
+      "start": 1250424,
+      "end": 1250829,
+      "file": "addCh.js"
+    },
+    {
+      "name": "DeadPlayer",
+      "start": 1250848,
+      "end": 1252609,
+      "file": "DeadPlayer.js"
+    },
+    {
+      "name": "Player",
+      "start": 1252744,
+      "end": 1303911,
+      "file": "Player.js"
+    },
+    {
+      "name": "Traps",
+      "start": 1380036,
+      "end": 1423844,
+      "file": "Traps.js"
+    },
+    {
+      "name": "Traps_",
+      "start": 1433643,
+      "end": 1471174,
+      "file": "Traps_.js"
+    },
+    {
+      "name": "Instakill",
+      "start": 1471245,
+      "end": 1548388,
+      "file": "Instakill.js"
+    },
+    {
+      "name": "Autobuy",
+      "start": 1548407,
+      "end": 1553846,
+      "file": "Autobuy.js"
+    },
+    {
+      "name": "Autoupgrade",
+      "start": 1553864,
+      "end": 1556073,
+      "file": "Autoupgrade.js"
+    },
+    {
+      "name": "Damages",
+      "start": 1556094,
+      "end": 1557074,
+      "file": "Damages.js"
+    },
+    {
+      "name": "AutoBreaker",
+      "start": 1557094,
+      "end": 1569868,
+      "file": "AutoBreaker.js"
+    },
+    {
+      "name": "CachedMapResource",
+      "start": 1600337,
+      "end": 1602931,
+      "file": "CachedMapResource.js"
+    },
+    {
+      "name": "CachedTreeResource",
+      "start": 1602949,
+      "end": 1603229,
+      "file": "CachedTreeResource.js"
+    },
+    {
+      "name": "CachedBushResource",
+      "start": 1603247,
+      "end": 1603528,
+      "file": "CachedBushResource.js"
+    },
+    {
+      "name": "CachedCatusResource",
+      "start": 1603546,
+      "end": 1603831,
+      "file": "CachedCatusResource.js"
+    },
+    {
+      "name": "CachedStoneResource",
+      "start": 1603849,
+      "end": 1604132,
+      "file": "CachedStoneResource.js"
+    },
+    {
+      "name": "CachedGoldminResource",
+      "start": 1604150,
+      "end": 1604436,
+      "file": "CachedGoldminResource.js"
+    },
+    {
+      "name": "Node_2",
+      "start": 1643292,
+      "end": 1643719,
+      "file": "Node_2.js"
+    },
+    {
+      "name": "Bot",
+      "start": 2317092,
+      "end": 2323376,
+      "file": "Bot.js"
+    },
+    {
+      "name": "BotObject",
+      "start": 2323397,
+      "end": 2324239,
+      "file": "BotObject.js"
+    },
+    {
+      "name": "BotObjManager",
+      "start": 2324258,
+      "end": 2328858,
+      "file": "BotObjManager.js"
+    },
+    {
+      "name": "MapPing",
+      "start": 10962312,
+      "end": 10963820,
+      "file": "MapPing.js"
+    }
+  ],
+  "failures": []
+}

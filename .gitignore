@@ -1,0 +1,29 @@
+# workspace/cache noise
+.agent-state/
+.deepseek-watch/
+dsw-edit-sandbox/
+logs/
+
+# secrets/local state
+.env
+*.log
+*.tmp
+.vrchat-status-alert-state.json
+
+# dependencies/build outputs
+node_modules/
+project-nozo-externals/node_modules/
+project-nozo-externals/dist/
+
+# generated throwaway baselines
+project-nozo-single.before-*.user.js
+
+# unrelated/local old userscripts
+celes.js
+v11.4.js
+videoDownloader*.js
+vrchat-status-alert*.js
+
+# optional local class extraction cache
+# keep this commented if you want class-out tracked
+# classes-out/

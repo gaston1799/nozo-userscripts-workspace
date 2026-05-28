@@ -1,0 +1,3 @@
+[submodule "project-nozo-externals"]
+	path = project-nozo-externals
+	url = https://github.com/gaston1799/project-nozo-externals.git
