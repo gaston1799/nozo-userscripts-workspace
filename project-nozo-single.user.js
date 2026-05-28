@@ -4361,6 +4361,7 @@ class PlayerRuntime {
         this.textQueue = [];
         this.mapPings = [];
         this.mapPingPool = [];
+        this.onShameHudUpdate = null;
         this.textManager = new Textmanager();
         this.deadPlayers = [];
         this.petals = [];
@@ -4838,6 +4839,20 @@ class PlayerRuntime {
 
     updateInstaHud() {
         if (typeof this.onInstaHudUpdate === "function") this.onInstaHudUpdate(this.legacyCtx.instaHUD || null);
+    }
+
+    updateShameHud(playerObj) {
+        if (typeof this.onShameHudUpdate !== "function") return;
+        const p = playerObj || this.ensurePlayer(this.mySid);
+        this.onShameHudUpdate({
+            active: !!(p && p.shameActive),
+            count: Number((p && p.shameCount) || 0),
+            transitions: Number((p && p.shameTransitions) || 0),
+            timer: Number((p && p.shameTimer) || 0),
+            skin: p ? p.skinIndex : null,
+            health: p ? p.health : null,
+            tick: this.root.game ? this.root.game.tick : null
+        });
     }
 
     getObjectsInLineOfSight(a, b, useProjectileRadius) {
@@ -5784,6 +5799,7 @@ class PlayerRuntime {
         if (sid != null) {
             this.mySid = sid;
             p.sid = sid;
+            this.updateShameHud(p);
         }
     }
 
@@ -5911,11 +5927,16 @@ class PlayerRuntime {
             tmpObj.dist5 = UTILS.getDist(tmpObj, p, 5, 5);
             tmpObj.aim5 = UTILS.getDirect(tmpObj, p, 5, 5);
             tmpObj.damageThreat = 0;
-            if (tmpObj.skinIndex == 45 && tmpObj.shameTimer <= 0) tmpObj.addShameTimer();
+            if (tmpObj.skinIndex == 45 && tmpObj.shameTimer <= 0) {
+                tmpObj.addShameTimer();
+                if (p.sid == tmpObj.sid) this.updateShameHud(tmpObj);
+            }
             if (tmpObj.oldSkinIndex == 45 && tmpObj.skinIndex != 45) {
                 tmpObj.shameTimer = 0;
                 tmpObj.shameCount = 0;
+                if (p.sid == tmpObj.sid) this.updateShameHud(tmpObj);
             }
+            if (p.sid == tmpObj.sid) this.updateShameHud(tmpObj);
             if (p.sid == tmpObj.sid) {
                 const scanObjectsRef = liztobjRef.length ? liztobjRef : gameObjectsRef;
                 if (scanObjectsRef.length) {
@@ -6447,6 +6468,7 @@ class PlayerRuntime {
             target.oldHealth = target.health;
             target.health = typeof hp === "number" ? hp : target.health;
             target.judgeShame(this.root.game);
+            if (target.sid === this.mySid) this.updateShameHud(target);
             if (target.oldHealth > target.health) {
                 target.damaged = target.oldHealth - target.health;
                 this.advHeal.push([sid, hp, target.damaged]);
@@ -6457,6 +6479,7 @@ class PlayerRuntime {
             p.oldHealth = p.health;
             p.health = typeof hp === "number" ? hp : p.health;
             p.judgeShame(this.root.game);
+            this.updateShameHud(p);
             if (p.oldHealth > p.health) {
                 p.damaged = p.oldHealth - p.health;
                 this.advHeal.push([sid, hp, p.damaged]);
@@ -7615,18 +7638,28 @@ function mountNormalMenu() {
     }
     renderCombatConfigs();
 
-    const updateShameInfo = function () {
+    const updateShameInfo = function (incoming) {
         const out = getEl("nozoShameInfo");
         if (!out) return;
         const rt = root.NozoSingle && root.NozoSingle.player;
-        const p = rt ? (rt.ensurePlayer(rt.mySid) || (rt.game && rt.game.getState("player", null))) : null;
-        if (!p) {
+        const p = incoming ? null : (rt ? (rt.ensurePlayer(rt.mySid) || (rt.game && rt.game.getState("player", null))) : null);
+        const data = incoming || (p ? {
+            active: !!p.shameActive,
+            count: Number(p.shameCount || 0),
+            transitions: Number(p.shameTransitions || 0),
+            timer: Number(p.shameTimer || 0),
+            skin: p.skinIndex,
+            health: p.health
+        } : null);
+        if (!data) {
             out.textContent = "Shame: --";
             return;
         }
-        const active = p.shameActive ? "ON" : "OFF";
-        const count = Number(p.shameTransitions || 0);
-        out.textContent = `Shame: ${active} | count: ${count}`;
+        const active = data.active ? "ON" : "OFF";
+        const count = Number(data.count || 0);
+        const transitions = Number(data.transitions || 0);
+        const timer = Math.ceil(Number(data.timer || 0) / 1000);
+        out.textContent = `Shame: ${active} | count: ${count} | trans: ${transitions} | ${timer}s`;
     };
     const updateResourceCacheInfo = function () {
         const out = getEl("nozoResCacheInfo");
@@ -7725,8 +7758,8 @@ function mountNormalMenu() {
     if (root.NozoSingle && root.NozoSingle.player) {
         root.NozoSingle.player.onReloadHudUpdate = (payload) => updateReloadHud(payload);
         root.NozoSingle.player.onInstaHudUpdate = (payload) => updateInstaHud(payload);
+        root.NozoSingle.player.onShameHudUpdate = (payload) => updateShameInfo(payload);
     }
-    setInterval(updateShameInfo, 200);
 }
 function styleOne(selector, styles) {
     const el = document.querySelector(selector);
