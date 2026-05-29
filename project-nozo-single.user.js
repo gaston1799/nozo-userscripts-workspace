@@ -547,6 +547,8 @@ class Player {
         this.weaponCode = 0;
         this.primaryIndex = 0;
         this.secondaryIndex = 0;
+        this.primaryVariant = 0;
+        this.secondaryVariant = 0;
         this.itemCounts = { 0: 0, 1: 0, 2: 0, 3: 0 };
         this.reloads = {
             0: 0, 1: 0, 2: 0, 3: 0,
@@ -606,6 +608,13 @@ class Player {
         this.buildIndex = tuple[i + 4];
         this.weaponIndex = tuple[i + 5];
         this.weaponVariant = tuple[i + 6];
+        if (this.weaponIndex < 9) {
+            this.primaryIndex = this.weaponIndex;
+            this.primaryVariant = this.weaponVariant;
+        } else if (this.weaponIndex > 8) {
+            this.secondaryIndex = this.weaponIndex;
+            this.secondaryVariant = this.weaponVariant;
+        }
         this.team = tuple[i + 7];
         this.isLeader = tuple[i + 8];
         this.skinIndex = tuple[i + 9];
@@ -824,14 +833,50 @@ class Items {
             { id: 15, type: 1, age: 9, pre: 12, name: "musket", Pdmg: 50, projectile: 5, speed: 1500 }
         ];
         this.list = [
-            { id: 16, group: 0, name: "apple", healing: 20 },
-            { id: 17, group: 0, age: 2, name: "cookie", healing: 40 },
-            { id: 18, group: 0, age: 7, name: "cheese", healing: 30 }
+            { group: this.groups[0], name: "apple", healing: 20, req: ["food", 10], scale: 22, holdOffset: 15, itemAID: 16 },
+            { age: 3, group: this.groups[0], name: "cookie", healing: 40, req: ["food", 15], scale: 27, holdOffset: 15, itemAID: 17 },
+            { age: 7, group: this.groups[0], name: "cheese", healing: 30, req: ["food", 25], scale: 27, holdOffset: 15, itemAID: 18 },
+            { group: this.groups[1], name: "wood wall", req: ["wood", 10], projDmg: true, health: 380, scale: 50, holdOffset: 20, placeOffset: -5, itemAID: 19 },
+            { age: 3, group: this.groups[1], name: "stone wall", req: ["stone", 25], health: 900, scale: 50, holdOffset: 20, placeOffset: -5, itemAID: 20 },
+            { age: 7, pre: 1, group: this.groups[1], name: "castle wall", req: ["stone", 35], health: 1500, scale: 52, holdOffset: 20, placeOffset: -5, itemAID: 21 },
+            { group: this.groups[2], name: "spikes", req: ["wood", 20, "stone", 5], health: 400, dmg: 20, scale: 49, spritePadding: -23, holdOffset: 8, placeOffset: -5, itemAID: 22 },
+            { age: 5, group: this.groups[2], name: "greater spikes", req: ["wood", 30, "stone", 10], health: 500, dmg: 35, scale: 52, spritePadding: -23, holdOffset: 8, placeOffset: -5, itemAID: 23 },
+            { age: 9, pre: 1, group: this.groups[2], name: "poison spikes", req: ["wood", 35, "stone", 15], health: 600, dmg: 30, pDmg: 5, scale: 52, spritePadding: -23, holdOffset: 8, placeOffset: -5, itemAID: 24 },
+            { age: 9, pre: 2, group: this.groups[2], name: "spinning spikes", req: ["wood", 30, "stone", 20], health: 500, dmg: 45, turnSpeed: 0.003, scale: 52, spritePadding: -23, holdOffset: 8, placeOffset: -5, itemAID: 25 },
+            { group: this.groups[3], name: "windmill", req: ["wood", 50, "stone", 10], health: 400, pps: 1, turnSpeed: 0.0016, spritePadding: 25, iconLineMult: 12, scale: 45, holdOffset: 20, placeOffset: 5, itemAID: 26 },
+            { age: 5, pre: 1, group: this.groups[3], name: "faster windmill", req: ["wood", 60, "stone", 20], health: 500, pps: 1.5, turnSpeed: 0.0025, spritePadding: 25, iconLineMult: 12, scale: 47, holdOffset: 20, placeOffset: 5, itemAID: 27 },
+            { age: 8, pre: 1, group: this.groups[3], name: "power mill", req: ["wood", 100, "stone", 50], health: 800, pps: 2, turnSpeed: 0.005, spritePadding: 25, iconLineMult: 12, scale: 47, holdOffset: 20, placeOffset: 5, itemAID: 28 },
+            { age: 5, group: this.groups[4], type: 2, name: "mine", req: ["wood", 20, "stone", 100], iconLineMult: 12, scale: 65, holdOffset: 20, placeOffset: 0, itemAID: 29 },
+            { age: 5, group: this.groups[11], type: 0, name: "sapling", req: ["wood", 150], iconLineMult: 12, colDiv: 0.5, scale: 110, holdOffset: 50, placeOffset: -15, itemAID: 30 },
+            { age: 4, group: this.groups[5], name: "pit trap", req: ["wood", 30, "stone", 30], trap: true, ignoreCollision: true, hideFromEnemy: true, health: 500, colDiv: 0.2, scale: 50, holdOffset: 20, placeOffset: -5, alpha: 0.6, itemAID: 31 },
+            { age: 4, group: this.groups[6], name: "boost pad", req: ["stone", 20, "wood", 5], ignoreCollision: true, boostSpeed: 1.5, health: 150, colDiv: 0.7, scale: 45, holdOffset: 20, placeOffset: -5, itemAID: 32 },
+            { age: 7, group: this.groups[7], doUpdate: true, name: "turret", req: ["wood", 200, "stone", 150], health: 800, projectile: 1, shootRange: 700, shootRate: 2200, scale: 43, holdOffset: 20, placeOffset: -5, itemAID: 33 },
+            { age: 7, group: this.groups[8], name: "platform", req: ["wood", 20], ignoreCollision: true, zIndex: 1, health: 300, scale: 43, holdOffset: 20, placeOffset: -5, itemAID: 34 },
+            { age: 7, group: this.groups[9], name: "healing pad", req: ["wood", 30, "food", 10], ignoreCollision: true, healCol: 15, health: 400, colDiv: 0.7, scale: 45, holdOffset: 20, placeOffset: -5, itemAID: 35 },
+            { age: 9, group: this.groups[10], name: "spawn pad", req: ["wood", 100, "stone", 100], health: 400, ignoreCollision: true, spawnPoint: true, scale: 45, holdOffset: 20, placeOffset: -5, itemAID: 36 },
+            { age: 7, group: this.groups[12], name: "blocker", req: ["wood", 30, "stone", 25], ignoreCollision: true, blocker: 300, health: 400, colDiv: 0.7, scale: 45, holdOffset: 20, placeOffset: -5, itemAID: 37 },
+            { age: 7, group: this.groups[13], name: "teleporter", req: ["wood", 60, "stone", 60], ignoreCollision: true, teleport: true, health: 200, colDiv: 0.7, scale: 45, holdOffset: 20, placeOffset: -5, itemAID: 38 }
         ];
+        for (let i = 0; i < this.list.length; i++) {
+            this.list[i].id = i;
+            this.list[i].itemID = i;
+            if (this.list[i].pre) this.list[i].pre = i - this.list[i].pre;
+        }
+    }
+
+    _adoptCatalogFrom(candidate) {
+        if (!candidate || candidate === this || typeof candidate !== "object") return;
+        if (Array.isArray(candidate.weapons) && candidate.weapons.length > this.weapons.length) this.weapons = candidate.weapons.slice();
+        if (Array.isArray(candidate.groups) && candidate.groups.length >= this.groups.length) this.groups = candidate.groups.slice();
+        if (Array.isArray(candidate.projectiles) && candidate.projectiles.length >= this.projectiles.length) this.projectiles = candidate.projectiles.slice();
+        if (Array.isArray(candidate.list) && candidate.list.length > this.list.length) this.list = candidate.list.slice();
+        if (Array.isArray(candidate.hats) && candidate.hats.length > this.hats.length) this.hats = candidate.hats.slice();
+        if (Array.isArray(candidate.accessories) && candidate.accessories.length > this.accessories.length) this.accessories = candidate.accessories.slice();
     }
 
     _hydrateFromRoot() {
         const r = this.root;
+        this._adoptCatalogFrom(r.items);
         if (Array.isArray(r.weapons) && r.weapons.length) this.weapons = r.weapons.slice();
         if (Array.isArray(r.groups) && r.groups.length) this.groups = r.groups.slice();
         if (Array.isArray(r.projectiles) && r.projectiles.length) this.projectiles = r.projectiles.slice();
@@ -858,6 +903,7 @@ class Items {
     }
 
     publish() {
+        this._adoptCatalogFrom(this.root.items);
         this.root.items = this;
         if (this.root._things && typeof this.root._things === "object") {
             this.root._things.items = this;
@@ -930,7 +976,10 @@ class GameObject {
     }
 
     isTeamObject(tmpObj) {
-        return this.owner == null ? true : (this.owner && (tmpObj.sid === this.owner.sid || (typeof tmpObj.findAllianceBySid === "function" && tmpObj.findAllianceBySid(this.owner.sid))));
+        if (this.owner == null) return true;
+        if (tmpObj.sid === this.owner.sid) return true;
+        if (this.owner.team != null && tmpObj.team != null && this.owner.team === tmpObj.team) return true;
+        return false;
     }
 }
 
@@ -1935,7 +1984,6 @@ class Traps {
         }
         this.protect = function (aim) {
             const _ctx = this.ctx;
-            sendChat("");
             if (!_ctx.configs.antiTrap) return;
             if (_ctx.player.items[4]) {
                 this.testCanPlace(4, -(Math.PI / 2), (Math.PI / 2), (Math.PI / 18), aim + Math.PI);
@@ -2511,7 +2559,7 @@ class Traps_ {
             let dontForceSoldier = false;
             if (!getEl("safeAntiSpikeTick")?.checked || !_ctx.enemy.length) return false;
             if (_ctx.near.dist2 <= 175) {
-                if (_ctx.traps.inTrap && _ctx.traps.info && _ctx.traps.info.health <= _ctx.items.weapons[_ctx.player.weapons[0]].dmg * 3.3 * _ctx.config.weaponVariants[_ctx.player.primaryVariant].val * (_ctx.items.weapons[_ctx.player.weapons[0]].sDmg || 1)) {
+                if (_ctx.traps.inTrap && _ctx.traps.info && _ctx.traps.info.health <= _ctx.items.weapons[_ctx.player.weapons[0]].dmg * 3.3 * (_ctx.config.weaponVariants[_ctx.player.primaryVariant] || _ctx.config.weaponVariants[0]).val * (_ctx.items.weapons[_ctx.player.weapons[0]].sDmg || 1)) {
                     noOfSpikes++;
                     dontForceSoldier = true;
                     _ctx.my.bullTick = false;
@@ -2552,7 +2600,6 @@ class Traps_ {
         };
         this.protect = function (aim) {
             const _ctx = this.ctx;
-            sendChat("");
             if (!_ctx.configs.antiTrap) return;
             this.testCanPlace(4, -(Math.PI / 2), (Math.PI / 2), (Math.PI / 5), aim + Math.PI);
             this.testCanPlace(2, -(Math.PI / 3), (Math.PI / 3), (Math.PI / 3), aim + Math.PI);
@@ -2961,8 +3008,8 @@ class Instakill {
         function getBaseDamages() {
             const pW = _things.items.weapons[_things.player.primaryIndex];
             const sW = _things.items.weapons[_things.player.secondaryIndex];
-            const pVar = config.weaponVariants[_things.player.primaryVariant].val;
-            const sVar = config.weaponVariants[_things.player.secondaryVariant].val;
+            const pVar = (config.weaponVariants[_things.player.primaryVariant] || config.weaponVariants[0]).val;
+            const sVar = (config.weaponVariants[_things.player.secondaryVariant] || config.weaponVariants[0]).val;
 
             const pBase = pW.dmg * pVar * (pW.sDmg || 1);
             const sBase = sW.dmg * sVar * (sW.sDmg || 1); // important: sW.sDmg
@@ -3110,8 +3157,8 @@ class Instakill {
             if (!closestEnemy) return "no insta3"
             //maxdmg useless
             let maxdmg = (_things.items.weapons[_things.player.primaryIndex].dmg *
-                config.weaponVariants[_things.player.primaryVariant].val * 1.5) + ((_things.items.weapons[_things.player.secondaryIndex].dmg *
-                    config.weaponVariants[_things.player.secondaryVariant].val * 1.5)) + 25
+                (config.weaponVariants[_things.player.primaryVariant] || config.weaponVariants[0]).val * 1.5) + ((_things.items.weapons[_things.player.secondaryIndex].dmg *
+                    (config.weaponVariants[_things.player.secondaryVariant] || config.weaponVariants[0]).val * 1.5)) + 25
             let canSpike = false
             if (!_things.nearTrap && sharedInfo && sharedInfo.trap) {
                 _things.nearTrap = sharedInfo.trap;
@@ -4362,6 +4409,7 @@ class PlayerRuntime {
         this.mapPings = [];
         this.mapPingPool = [];
         this.onShameHudUpdate = null;
+        this.healDebug = [];
         this.textManager = new Textmanager();
         this.deadPlayers = [];
         this.petals = [];
@@ -4498,6 +4546,19 @@ class PlayerRuntime {
         this.autoBreaker = new AutoBreaker(this.legacyCtx);
     }
 
+    recordHealDebug(stage, data) {
+        const entry = Object.assign({
+            stage,
+            tick: this.root.game ? this.root.game.tick : null,
+            time: Date.now()
+        }, data || {});
+        this.healDebug.push(entry);
+        if (this.healDebug.length > 40) this.healDebug.shift();
+        if (this.root.NozoSingle) this.root.NozoSingle.healDebug = this.healDebug;
+        if (_configs.debug || _configs.healerDebug) console.log("[NozoSingle:Heal]", entry);
+        return entry;
+    }
+
     _ensureThingsContext() {
         // Wire NozoSingle._things compatibility facade to legacyCtx (authoritative internal source).
         if (!this.root.NozoSingle) this.root.NozoSingle = {};
@@ -4582,6 +4643,15 @@ class PlayerRuntime {
         const p = this.ensurePlayer(this.mySid);
         const item = this.items.list[p.items[id]];
         if (!item) throw new Error(`[NozoSingle:place] missing item slot ${String(id)}`);
+        if (id === 0) {
+            this.recordHealDebug("placeFood", {
+                itemId: p.items[id],
+                itemName: item.name,
+                angle: rad,
+                health: p.health,
+                shameCount: p.shameCount
+            });
+        }
         const tmpS = p.scale + item.scale + (item.placeOffset || 0);
         const tmpX = p.x2 + tmpS * Math.cos(rad);
         const tmpY = p.y2 + tmpS * Math.sin(rad);
@@ -5092,7 +5162,11 @@ class PlayerRuntime {
         if (p.skinIndex !== 45 && p.skinIndex !== 56) {
             const foodItem = this.items.list[p.items[0]];
             if (!foodItem) throw new Error(`[NozoSingle:healthBased] missing food item for slot ${String(p.items[0])}`);
-            return Math.ceil((100 - p.health) / foodItem.healing);
+            const healing = Number(foodItem.healing);
+            if (!Number.isFinite(healing) || healing <= 0) {
+                throw new Error(`[NozoSingle:healthBased] invalid healing for food ${String(p.items[0])}`);
+            }
+            return Math.ceil((100 - p.health) / healing);
         }
         return 0;
     }
@@ -5213,14 +5287,33 @@ class PlayerRuntime {
         const game = this.root.game;
         const tickRate = Number(game.tickRate) || 80;
         const pingTime = Number(this.legacyCtx.pingTime || 0);
+        this.recordHealDebug("healerEnter", {
+            t: t || 0,
+            health: p ? p.health : null,
+            foodId: p && p.items ? p.items[0] : null,
+            skinIndex: p ? p.skinIndex : null,
+            shameCount: p ? p.shameCount : null,
+            pingTime
+        });
 
         if (!t) {
             const preTicks = Math.max(1, Math.ceil((pingTime * 1.5) / tickRate));
+            this.recordHealDebug("healerSchedule", { preTicks, tickRate, pingTime });
             game.tickBase(() => { this.healer(p, 1); }, preTicks);
             return;
         }
 
+        if (!p.items.length) {
+            console.log("[healer] skip — items not loaded yet, p.items:", p.items);
+            return;
+        }
         const count = this.healthBased(p);
+        this.recordHealDebug("healerCount", {
+            count,
+            health: p.health,
+            foodId: p.items[0],
+            foodName: this.items.list[p.items[0]]?.name
+        });
         if (p.skinIndex === 56) {
             game.tickBase(() => {
                 for (let i = 0; i < this.healthBased(p); i++) {
@@ -5603,8 +5696,7 @@ class PlayerRuntime {
         //    hammer/insta target trap first, local in-trap info only as a fallback.
         things.instaHUD = null;
         (() => {
-            const fallbackTrap = this.traps.info && this.traps.info.active ? this.traps.info : null;
-            const trap = things.nearTrap || things.trap || fallbackTrap;
+            const trap = (things.scans && things.scans.near && things.scans.near.trapFound) || things.trap || null;
             if (!trap || !player) return;
 
             const trapR = trap.getScale();
@@ -5799,6 +5891,8 @@ class PlayerRuntime {
         if (sid != null) {
             this.mySid = sid;
             p.sid = sid;
+            p.spawn(null, false);
+            this.inGame = true;
             this.updateShameHud(p);
         }
     }
@@ -6088,7 +6182,7 @@ class PlayerRuntime {
                     nears.push(tmpObj);
                 }
             }
-            if (tmpObj != p) {
+            if (tmpObj.sid != p.sid) {
                 tmpObj.addDamageThreat(p, this.items, this.root.config || _config, this.root.game);
             }
         }
@@ -6154,8 +6248,16 @@ class PlayerRuntime {
                 return tmpObj.shameCount < _HEAL_SHAME_FAST_HEAL_CUTOFF;
             };
             const _healLogDecision = (stage, reason, damaged, dmg, tmpObj, inTrap) => {
-                // TODO(advHeal): wire addMenuChText when ported
-                // this.addMenuChText("[HealDbg]", msg, "#7fd6ff", 0);
+                this.recordHealDebug("decision", {
+                    decision: stage,
+                    reason,
+                    damaged,
+                    missingHealth: dmg,
+                    targetSid: tmpObj ? tmpObj.sid : null,
+                    targetHealth: tmpObj ? tmpObj.health : null,
+                    shameCount: tmpObj ? tmpObj.shameCount : null,
+                    inTrap: !!inTrap
+                });
             };
             const _healSlowHeal = (timerMs, delayTicks, damaged, dmg, tmpObj, inTrap, slowUnlessInsta) => {
                 let useDelayTicks = delayTicks;
@@ -6164,10 +6266,25 @@ class PlayerRuntime {
                     useDelayTicks = _HEAL_NON_INSTA_DELAY_TICKS;
                 }
                 if (useDelayTicks > 0) {
+                    this.recordHealDebug("slowHealSchedule", {
+                        delayTicks: useDelayTicks,
+                        timerMs,
+                        damaged,
+                        missingHealth: dmg,
+                        slowUnlessInsta: !!slowUnlessInsta
+                    });
                     game.tickBase(() => { this.healer(p); }, useDelayTicks);
                 } else {
                     const tickRate = Number(game.tickRate) || 80;
-                    game.tickBase(() => { this.healer(p); }, Math.max(1, Math.ceil(timerMs / tickRate)));
+                    const delay = Math.max(1, Math.ceil(timerMs / tickRate));
+                    this.recordHealDebug("slowHealTimer", {
+                        delayTicks: delay,
+                        timerMs,
+                        damaged,
+                        missingHealth: dmg,
+                        slowUnlessInsta: !!slowUnlessInsta
+                    });
+                    game.tickBase(() => { this.healer(p); }, delay);
                 }
             };
             const _healSlowHealBullDaggerFallback = (timerMs, damaged, dmg, tmpObj, inTrap, healTimeout, slowUnlessInsta) => {
@@ -6206,6 +6323,7 @@ class PlayerRuntime {
             };
 
             if (this.advHeal.length) {
+                this.recordHealDebug("drainAdvHeal", { count: this.advHeal.length });
                 this.advHeal.forEach((updHealth) => {
                     // TODO(advHeal): guard — skip if pingTime < 150 not yet ported fully
                     {
@@ -6214,12 +6332,21 @@ class PlayerRuntime {
                         let damaged = updHealth[2];
                         let tmpObj = this._findPlayerBySid(sid);
                         let bullTicked = false;
+                        this.recordHealDebug("advHealEvent", {
+                            sid,
+                            value,
+                            damaged,
+                            isSelf: tmpObj ? tmpObj.sid === this.mySid : false,
+                            found: !!tmpObj,
+                            health: tmpObj ? tmpObj.health : null,
+                            shameCount: tmpObj ? tmpObj.shameCount : null
+                        });
 
                         // —— Death detection ——
                         if (tmpObj && tmpObj.health <= 0) {
                             if (!tmpObj.death) {
                                 tmpObj.death = true;
-                                if (tmpObj !== p) {
+                                if (tmpObj.sid !== p.sid) {
                                     // TODO(advHeal): GM target-kill tracking (stubbed)
                                     // if (sid == GM_getValue('k')) { ... }
                                     console.log(tmpObj.name, "has died", sid);
@@ -6232,7 +6359,7 @@ class PlayerRuntime {
                         // —— Bull-tick detection ——
                         if (damaged === 5 * (p.skinIndex === 6 ? 0.75 : 1)) {
                             p.bullTick = game.tick;
-                            if (tmpObj === p) {
+                            if (tmpObj && tmpObj.sid === p.sid) {
                                 tmpObj.needTick = 0;
                                 if (my.reSync) { my.reSync = false; }
                                 if (p.skinIndex === 7) {
@@ -6243,7 +6370,7 @@ class PlayerRuntime {
                             }
                         }
 
-                        if (tmpObj === p) {
+                        if (tmpObj && tmpObj.sid === p.sid) {
                             if (this.inGame) {
                                 // let attackers = this.getAttacker(damaged);
                                 let gearDmgs = [0.25, 0.45].map((val) => val * (items && items.weapons && items.weapons[p.weapons[0]] ? items.weapons[p.weapons[0]].dmg : 25) * this.soldierMult());
@@ -6257,9 +6384,13 @@ class PlayerRuntime {
                                 const healWithShameGate = (w, r) => _healWithShameGate(w, r, damaged, dmg, tmpObj, false, healTimeout, healingBetaEnabled, _hSlowUnlessInsta);
 
                                 if (healingBetaEnabled) {
-                                    const foodHeals = [20, 40, 30];
                                     const foodIndex = p.items ? p.items[0] : 0;
-                                    const healAmount = foodHeals[foodIndex] || 0;
+                                    const foodItem = items.list[foodIndex];
+                                    if (!foodItem) throw new Error(`[NozoSingle:advHeal] missing food item ${String(foodIndex)}`);
+                                    const healAmount = Number(foodItem.healing);
+                                    if (!Number.isFinite(healAmount) || healAmount <= 0) {
+                                        throw new Error(`[NozoSingle:advHeal] invalid food healing ${String(foodIndex)}`);
+                                    }
 
                                     // Bull damage recording (condition only)
                                     if (things.bull && things.bull.active && typeof damaged === "number") {
@@ -6468,10 +6599,21 @@ class PlayerRuntime {
             target.oldHealth = target.health;
             target.health = typeof hp === "number" ? hp : target.health;
             target.judgeShame(this.root.game);
-            if (target.sid === this.mySid) this.updateShameHud(target);
+            if (target.sid === this.mySid) {
+                this.updateShameHud(target);
+                p.applyHealth(target.health);
+            }
             if (target.oldHealth > target.health) {
                 target.damaged = target.oldHealth - target.health;
                 this.advHeal.push([sid, hp, target.damaged]);
+                this.recordHealDebug("pushAdvHeal", {
+                    sid,
+                    oldHealth: target.oldHealth,
+                    health: target.health,
+                    damaged: target.damaged,
+                    isSelf: target.sid === this.mySid,
+                    queue: this.advHeal.length
+                });
             }
             return;
         }
@@ -6483,6 +6625,13 @@ class PlayerRuntime {
             if (p.oldHealth > p.health) {
                 p.damaged = p.oldHealth - p.health;
                 this.advHeal.push([sid, hp, p.damaged]);
+                this.recordHealDebug("pushAdvHealFallback", {
+                    sid,
+                    oldHealth: p.oldHealth,
+                    health: p.health,
+                    damaged: p.damaged,
+                    queue: this.advHeal.length
+                });
             }
         }
     }
@@ -6609,8 +6758,11 @@ class PlayerRuntime {
             const dir = flat[i + 3], scale = flat[i + 4];
             const type = flat[i + 5], dataIndex = flat[i + 6];
             const ownerSid = flat[i + 7];
-            const ownerObj = ownerSid != null ? (this._findPlayerBySid(ownerSid) || { sid: ownerSid }) : null;
-            const itemData = (this.items && Array.isArray(this.items.list)) ? (this.items.list[dataIndex] || {}) : {};
+            const ownerObj = ownerSid >= 0 ? (this._findPlayerBySid(ownerSid) || { sid: ownerSid }) : null;
+            const itemData = (this.items && Array.isArray(this.items.list)) ? this.items.list[dataIndex] : null;
+            if (Number.isInteger(dataIndex) && dataIndex >= 0 && !itemData) {
+                throw new Error(`[NozoSingle:H] missing items.list[${String(dataIndex)}] for object ${String(sid)}`);
+            }
             this.objectManager.add(sid, x, y, dir, scale, type, itemData, true, ownerObj);
         }
         this.syncResourceCacheFromObjects();
@@ -8111,6 +8263,7 @@ root.NozoSingle = {
     loadouts: loadoutManager,
     bootstrap: bootstrapManager,
     player: playerRuntime,
+    healDebug: playerRuntime.healDebug,
     getTrapState: function () {
         const rt = this.player;
         const traps = rt.traps;
